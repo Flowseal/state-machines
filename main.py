@@ -82,7 +82,49 @@ def mealy_to_moore(input_file, output_file):
 
 
 def moore_to_mealy(input_file, output_file):
-    ... 
+    with open(input_file) as f:
+        input_data = f.read().strip()
+    
+    state_output: dict[str, str] = dict()  # state -> output
+    input_to_transitions: dict[str, dict[str, str]] = defaultdict(dict)  # symbol -> current state -> next state/output
+
+    # Save state with his output
+    input_outputs_line = input_data.splitlines()[0].split(";")[1:]
+    input_states_line = input_data.splitlines()[1].split(";")[1:]
+
+    for output, state in zip(input_outputs_line, input_states_line):
+        state_output[state] = output
+
+    # Save transitions
+    for transitions in input_data.splitlines()[2:]:
+        input_symbol = transitions.split(";")[0].strip()
+
+        for i, transition in enumerate(transitions.split(";")[1:]):
+            state = transition.strip()
+            output = state_output[state]
+            input_to_transitions[input_symbol][list(state_output.keys())[i]] = f"{state}/{output}"
+    
+    # Convert to mealy
+    states_line = [""]
+    states_line.extend(list(state_output.keys()))
+    input_lines = []
+    
+    # Input lines
+    for symbol in input_to_transitions:
+        line = []
+        line.append(symbol)
+
+        for current_state in input_to_transitions[symbol]:
+            transition = input_to_transitions[symbol][current_state]
+            line.append(transition)
+        
+        input_lines.append(line)
+    
+    # Write to output
+    with open(output_file, "w") as f:
+        f.write(";".join(states_line))
+        for line in input_lines:
+            f.write("\n" + ";".join(line))
 
 
 def main():
