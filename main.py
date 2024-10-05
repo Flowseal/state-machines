@@ -1,11 +1,31 @@
 import sys
 import enum
+import typing
 
+from dataclasses import dataclass
 from collections import defaultdict
 
 class Modes(str, enum.Enum):
     mealy_to_moore = "mealy-to-moore"
     moore_to_mealy = "moore-to-mealy"
+
+
+def write_line(file: typing.IO, line):
+    if not line:
+        file.write("\n")
+        
+    if isinstance(line[0], str):
+        file.write(";".join(line) + "\n")
+
+    elif isinstance(line[0], list):
+        for array in line:
+            write_line(file, array)
+
+
+def write_to_file(filename: str, *lines: list):
+    with open(filename, "w") as f:
+        for line in lines:
+            write_line(f, line)
 
 
 def mealy_to_moore(input_file, output_file):
@@ -74,11 +94,7 @@ def mealy_to_moore(input_file, output_file):
         input_lines.append(line)
     
     # Write to output
-    with open(output_file, "w") as f:
-        f.write(";".join(outputs_line) + "\n")
-        f.write(";".join(states_line))
-        for line in input_lines:
-            f.write("\n" + ";".join(line))
+    write_to_file(output_file, outputs_line, states_line, input_lines)
 
 
 def moore_to_mealy(input_file, output_file):
@@ -105,8 +121,7 @@ def moore_to_mealy(input_file, output_file):
             input_to_transitions[input_symbol][list(state_output.keys())[i]] = f"{state}/{output}"
     
     # Convert to mealy
-    states_line = [""]
-    states_line.extend(list(state_output.keys()))
+    states_line = ["", *state_output]
     input_lines = []
     
     # Input lines
@@ -121,10 +136,7 @@ def moore_to_mealy(input_file, output_file):
         input_lines.append(line)
     
     # Write to output
-    with open(output_file, "w") as f:
-        f.write(";".join(states_line))
-        for line in input_lines:
-            f.write("\n" + ";".join(line))
+    write_to_file(output_file, states_line, input_lines)
 
 
 def main():
