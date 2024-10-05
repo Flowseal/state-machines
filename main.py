@@ -28,6 +28,28 @@ def write_to_file(filename: str, *lines: list):
             write_line(f, line)
 
 
+def prepare_transitions(
+    input_to_transitions: dict[str, dict], 
+    state_outputs:  dict[str, set[str]] = None, 
+    replacements: dict = None) -> list:
+
+    input_lines = list()
+
+    for symbol in input_to_transitions:
+        line = [symbol]
+
+        for current_state in input_to_transitions[symbol]:
+            next_state = input_to_transitions[symbol][current_state]
+
+            if state_outputs:
+                repeats = len(state_outputs.get(current_state, [1]))
+                line.extend(replacements[next_state] for _ in range(repeats))
+            else:
+                line.append(next_state)
+        
+        input_lines.append(line)
+
+
 def mealy_to_moore(input_file, output_file):
     with open(input_file) as f:
         input_data = f.read().strip()
@@ -67,7 +89,6 @@ def mealy_to_moore(input_file, output_file):
     # Convert to moore
     outputs_line = [""]
     states_line = [""]
-    input_lines = []
 
     # Outputs and states lines
     for state in states:
@@ -79,22 +100,11 @@ def mealy_to_moore(input_file, output_file):
                 outputs_line.append(output)
                 states_line.append(replacements[f"{state}/{output}"])
 
-    # Input lines
-    for symbol in input_to_transitions:
-        line = []
-        line.append(symbol)
-
-        for current_state in input_to_transitions[symbol]:
-            next_state = input_to_transitions[symbol][current_state]
-            repeats = 1 if current_state not in state_outputs else len(state_outputs[current_state])
-
-            for _ in range(repeats):
-                line.append(replacements[next_state])
-        
-        input_lines.append(line)
+    # Transitions lines
+    transitions_lines = prepare_transitions(input_to_transitions, state_outputs, replacements)
     
     # Write to output
-    write_to_file(output_file, outputs_line, states_line, input_lines)
+    write_to_file(output_file, outputs_line, states_line, transitions_lines)
 
 
 def moore_to_mealy(input_file, output_file):
@@ -122,21 +132,12 @@ def moore_to_mealy(input_file, output_file):
     
     # Convert to mealy
     states_line = ["", *state_output]
-    input_lines = []
     
-    # Input lines
-    for symbol in input_to_transitions:
-        line = []
-        line.append(symbol)
-
-        for current_state in input_to_transitions[symbol]:
-            transition = input_to_transitions[symbol][current_state]
-            line.append(transition)
-        
-        input_lines.append(line)
+    # Transitions lines
+    transitions_lines = prepare_transitions(input_to_transitions)
     
     # Write to output
-    write_to_file(output_file, states_line, input_lines)
+    write_to_file(output_file, states_line, transitions_lines)
 
 
 def main():
