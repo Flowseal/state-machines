@@ -14,7 +14,7 @@ def write_line(file: typing.IO, line):
     if not line:
         file.write("\n")
         
-    if isinstance(line[0], str):
+    elif isinstance(line[0], str):
         file.write(";".join(line) + "\n")
 
     elif isinstance(line[0], list):
@@ -29,8 +29,8 @@ def write_to_file(filename: str, *lines: list):
 
 
 def prepare_transitions(
-    input_to_transitions: dict[str, dict], 
-    state_outputs:  dict[str, set[str]] = None, 
+    input_to_transitions: typing.Dict[str, typing.Dict[str, str]],
+    state_outputs:  dict = None, 
     replacements: dict = None) -> list:
 
     input_lines = list()
@@ -48,6 +48,8 @@ def prepare_transitions(
                 line.append(next_state)
         
         input_lines.append(line)
+
+    return input_lines
 
 
 def mealy_to_moore(input_file, output_file):
