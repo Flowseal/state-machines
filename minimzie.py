@@ -1,7 +1,11 @@
 import typing
 
+from utils import write_to_file
 from dataclasses import dataclass, field
 from collections import defaultdict
+
+SPLIT_BY_STATE = 0
+SPLIT_BY_OUTPUT = 1
 
 @dataclass
 class MealyData:
@@ -37,49 +41,66 @@ def read_mealy(filename: str) -> MealyData:
 def split_states_in_groups(
         states: typing.Union[typing.List[str], typing.Dict[str, typing.List]],
         inputs: typing.Dict[str, typing.Dict],
-        split_index: int
-        ) -> typing.Tuple[typing.Dict[str, typing.List]]:
+        split_index: int,
+        prev_state_to_group: typing.Optional[typing.Dict[str, str]] = None
+        ) -> typing.Tuple[typing.Dict[str, typing.List], typing.Dict[str, typing.List], typing.Dict[str, str]]:
     
-    groups: dict[str, list] = defaultdict(list)  # outputs -> list of states with these outputs
-    group_names: dict[str, str] = dict()  # state -> group name (key of groups)
+    groups: typing.Dict[str, list] = defaultdict(list)  # group name -> list of states
+    group_outputs: typing.Dict[str, typing.List] = dict()  # group name -> list of outputs
+    state_to_group: typing.Dict[str, str] = dict()  # state -> group name (key of groups)
     
-    def do_split(state: str):
+    def do_split(state: str, group_prefix = '_'):
+        group_symbols = [group_prefix]
         outputs = []
+
         for symbol in inputs:
-            outputs.append(inputs[symbol][state].split('/')[split_index])
+            if split_index == SPLIT_BY_OUTPUT:  # if first splitting
+                group_symbol = inputs[symbol][state].split('/')[split_index]
+                group_symbols.append(group_symbol)
+                continue
+
+            group_symbol = inputs[symbol][state].split('/')[split_index]
+            outputs.append(inputs[symbol][state].split('/')[SPLIT_BY_OUTPUT])
+
+            group_name = prev_state_to_group[group_symbol]
+            group_symbol = list(dict.fromkeys(prev_state_to_group.values())).index(group_name)
+            group_symbols.append(str(group_symbol))
         
-        outputs_str = ' '.join(outputs)
-        groups[outputs_str].append(state)
-        group_names[state] = outputs_str
+        group_symbols_str = ' '.join(group_symbols)
+        groups[group_symbols_str].append(state)
+        group_outputs[group_symbols_str] = outputs
+        state_to_group[state] = group_symbols_str
+
+    print('PREV', str(prev_state_to_group))
 
     if isinstance(states, list):
         for state in states:
-                do_split(state)
+            do_split(state)
     else:
-        for group in states:
+        for i, group in enumerate(states, start=1):
             for state in states[group]:
-                do_split(state)
+                do_split(state, '_ ' * i)
 
-    return groups
+    print(str(groups))
+
+    return groups, group_outputs, state_to_group
 
 
 def minimize_mealy(input_file, output_file):
     mealy_data = read_mealy(input_file)
-    SPLIT_BY_STATE = 0
-    SPLIT_BY_OUTPUT = 1
 
     # First - split states by their outputs
-    groups = split_states_in_groups(
+    groups, _, state_to_group = split_states_in_groups(
         mealy_data.states, mealy_data.input_to_transitions, SPLIT_BY_OUTPUT)
 
     # Second - replace transitions with groups
-    groups = split_states_in_groups(
-            groups, mealy_data.input_to_transitions, SPLIT_BY_STATE)
+    groups, _, state_to_group = split_states_in_groups(
+            groups, mealy_data.input_to_transitions, SPLIT_BY_STATE, state_to_group)
     
     # Third - minimize until groups stop splitting
     while True:
-        new_groups = split_states_in_groups(
-            groups, mealy_data.input_to_transitions, SPLIT_BY_STATE)
+        new_groups, group_outputs, state_to_group = split_states_in_groups(
+            groups, mealy_data.input_to_transitions, SPLIT_BY_STATE, state_to_group)
         
         groups_equal = str(new_groups) == str(groups)
         groups = new_groups
@@ -87,4 +108,23 @@ def minimize_mealy(input_file, output_file):
         if groups_equal:
             break
     
+    # New states
+    states_line = [""]
+    for i in range(len(groups)):
+        states_line.append(f"X{i}")
     
+    # Transitions
+    transitions_lines = []
+
+    for i, symbol in enumerate(mealy_data.input_to_transitions):
+        line = [symbol]
+        for group in groups:
+            group_states = group.replace('_ ', '').strip().split(' ')
+            state = "X" + str(group_states[i])
+            output = group_outputs[group][i]
+            line.append(f"{state}/{output}")
+            
+        transitions_lines.append(line)
+
+    # Write to output
+    write_to_file(output_file, states_line, transitions_lines)

@@ -1,5 +1,6 @@
 import typing
 
+from utils import write_to_file
 from dataclasses import dataclass, field
 from collections import defaultdict
 
@@ -64,24 +65,6 @@ def read_moore(filename: str) -> MooreData:
                 list(moore_data.state_output.keys())[i]] = f"{state}/{output}"
     
     return moore_data
-
-
-def write_line(file: typing.IO, line):
-    if not line:
-        file.write("\n")
-        
-    elif isinstance(line[0], str):
-        file.write(";".join(line) + "\n")
-
-    elif isinstance(line[0], list):
-        for array in line:
-            write_line(file, array)
-
-
-def write_to_file(filename: str, *lines: list):
-    with open(filename, "w") as f:
-        for line in lines:
-            write_line(f, line)
 
 
 def prepare_transitions(
