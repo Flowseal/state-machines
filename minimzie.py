@@ -98,8 +98,7 @@ def split_states_in_groups(
         group_outputs[group_symbols_str] = outputs
         state_to_group[state] = group_symbols_str
 
-    # print('PREV', str(prev_state_to_group))
-
+    # if we splitting states into groups or we already have groups
     if isinstance(states, list):
         for state in states:
             do_split(state)
@@ -107,8 +106,6 @@ def split_states_in_groups(
         for i, group in enumerate(states, start=1):
             for state in states[group]:
                 do_split(state, f'\{i}')
-
-    # print(str(groups))
 
     return groups, group_outputs, state_to_group
 
