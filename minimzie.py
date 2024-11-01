@@ -135,13 +135,13 @@ def make_groups(data: typing.Union[MealyData, MooreData]) -> typing.Tuple[
         if groups_equal:
             break
     
-    return groups, group_outputs, state_to_group
+    return groups, group_outputs
 
 
 def minimize_mealy(input_file, output_file):
     mealy_data = read_mealy(input_file)
-    groups, group_outputs, state_to_group = make_groups(mealy_data)
-    print("writing...")
+    groups, group_outputs = make_groups(mealy_data)
+
     # New states
     states_line = [""]
     for i in range(len(groups)):
@@ -166,7 +166,7 @@ def minimize_mealy(input_file, output_file):
 
 def minimize_moore(input_file, output_file):
     moore_data = read_moore(input_file)
-    groups, group_outputs, state_to_group = make_groups(moore_data)
+    groups, group_outputs = make_groups(moore_data)
     
     # Outputs & New states
     outputs_line = [""]
