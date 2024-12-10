@@ -1,4 +1,3 @@
-import re
 import sys
 from dataclasses import dataclass, field
 from collections import defaultdict
@@ -8,79 +7,121 @@ class StateDesc:
     final: bool = False
     transitions: dict[str, list[str]] = field(default_factory=lambda: defaultdict(list))
 
+type StateMachine = dict[str, StateDesc]
+EPSILON = "ε"
+STATE_PREFIX = "S"
+START_STATE_INDEX = 0
 
-def grammar_to_states(raw_gramma: str, pattern: re.Pattern, transitions_pattern: re.Pattern, is_right: bool = True) -> tuple[dict[str, StateDesc], str]:
-    start_state = pattern.findall(raw_gramma)[0][0]
-    states: dict[str, StateDesc] = defaultdict(StateDesc)
-    states["H" if is_right else start_state] = StateDesc(final=True)
 
-    for match in pattern.finditer(raw_gramma):
-        state = match.group(1)
-        transitions = match.group(2).split("|")
-
-        if state not in states:
-            states[state] = StateDesc()
-
-        for transition in transitions:
-            match_transition = transitions_pattern.search(transition)
-
-            if is_right:
-                symbol = match_transition.group(1)
-                next_state = match_transition.group(2) or "H"
-                states[state].transitions[symbol].append(next_state)
-            else:
-                symbol = match_transition.group(2)
-                next_state = match_transition.group(1) or "H"
-                states[next_state].transitions[symbol].append(state)
+def read_state_matchine(file_name: str) -> tuple[StateMachine, str, str]:
+    with open(file_name, "r", encoding="utf-8") as f:
+        data = f.read().splitlines()
     
-    return states, start_state if is_right else "H"
+    state_machine: dict[str, StateDesc] = defaultdict(StateDesc)
+    final_symbols = data[0].strip().split(";")
+    states = data[1].strip().split(";")
+    start_state = states[1]
+    final_state = states[final_symbols.index("F")]
+    
+    for line in data[2:]:
+        if not line.strip(): 
+            continue
+
+        line = line.strip().split(";")
+        symbol = line[0]
+        
+        for i, transition in enumerate(line[1:], start=1):
+            transition = transition.strip()
+            state_machine[states[i]].final = final_state == states[i]
+            state_machine[states[i]].transitions[symbol] = transition.split(",") if transition else []
+    
+    return state_machine, start_state, final_state
 
 
-def save_states(states: dict[str, StateDesc], output_file, start_state):
-    states_list = [start_state] + list(states.keys())
-    states_list = list(dict.fromkeys(states_list))
-    symbols_list = sorted({symbol for state in states for symbol in states[state].transitions})
+def get_epsilon_transitions(state_machine: StateMachine) -> dict:
+    transitions = {}
+    states = list(state_machine.keys())
+    
+    for state in states:
+        visited, q = [], [state]
+        while q:
+            s = q.pop()
+            if s not in visited:
+                visited.append(s)
+                q.extend(state_machine[s].transitions.get(EPSILON, []))
 
-    f_line = [''] + ['F' if states[state].final else '' for state in states_list]
-    states_line = [''] + [f'q{i}' for i in range(len(states_list))]
-    state_index_map = {state: f'q{i}' for i, state in enumerate(states_list)}
+        transitions[state] = visited[:]
 
-    transitions_lines = []
-    for symbol in symbols_list:
-        row = [symbol] + [''] * len(states_list)
-        for state in states_list:
-            state_index = states_list.index(state) + 1
-            transitions = states[state].transitions.get(symbol, [])
-            row[state_index] = ",".join(state_index_map[next_state] for next_state in transitions)
-        transitions_lines.append(row)
+    return transitions
 
-    with open(output_file, "w", encoding="utf-8") as f:
+
+def eclosure(states, epsilon_transitions) -> list:
+    eclosures_list = list()
+    for state in states:
+        eclosures_list.extend([state] + epsilon_transitions[state])
+
+    return list(dict.fromkeys(eclosures_list))
+
+
+def get_transitions_for_state(current_eclosure: list, symbol: str, state_machine: StateMachine) -> list[str]:
+    transitions = []
+    for s in current_eclosure:
+        transitions.extend(state_machine[s].transitions[symbol])
+    return list(dict.fromkeys(transitions))
+
+
+def find_or_create_state(transitions: list[str], states_eclosures: dict[str, list[str]], states: list[str]) -> str:
+    if not transitions:
+        return ''
+        
+    for k, v in states_eclosures.items():
+        if sorted(transitions) == sorted(v):
+            return k
+        
+    new_state = f"{STATE_PREFIX}{len(states)+START_STATE_INDEX}"
+    states.append(new_state)
+    states_eclosures[new_state] = transitions
+    return new_state
+
+
+def determine_state_machine(state_machine: StateMachine, start_state: str, final_state: str) -> StateMachine:
+    epsilon_transitions = get_epsilon_transitions(state_machine)
+    states_eclosures = {f"{STATE_PREFIX}{START_STATE_INDEX}": [start_state]}
+    states_to_process = [f"{STATE_PREFIX}{START_STATE_INDEX}"]
+    determined_state_machine: StateMachine = defaultdict(StateDesc)
+
+    for state in states_to_process:
+        current_eclosure = eclosure(states_eclosures[state], epsilon_transitions)
+        determined_state_machine[state].final = final_state in current_eclosure
+
+        for symbol in state_machine[start_state].transitions:
+            if symbol == EPSILON: continue
+
+            transitions = get_transitions_for_state(current_eclosure, symbol, state_machine)
+            next_state = find_or_create_state(transitions, states_eclosures, states_to_process)
+            determined_state_machine[state].transitions[symbol] = [next_state]
+
+    return determined_state_machine
+
+
+def save_state_machine(state_machine: StateMachine, file_name: str) -> None:
+    symbols = sorted({symbol for state in state_machine for symbol in state_machine[state].transitions})
+    f_line = [""] + ["F" if state_machine[state].final else '' for state in state_machine]
+    states_line = [""] + list(state_machine.keys())
+
+    with open(file_name, "w", encoding="utf-8") as f:
         f.write(';'.join(f_line) + "\n")
         f.write(';'.join(states_line) + "\n")
-        for row in transitions_lines:
-            f.write(';'.join(row) + "\n")
-
-
-def parse_grammar(raw_grammar: str):
-    rules_count = raw_grammar.count("->")
-    left_pattern = re.compile(r"^\s*<(\w+)>\s*->\s*((?:<\w+>\s+)?[\wε](?:\s*\|\s*(?:<\w+>\s+)?[\wε])*)\s*$", re.MULTILINE)
-    right_pattern = re.compile(r"^\s*<(\w+)>\s*->\s*([\wε](?:\s+<\w+>)?(?:\s*\|\s*[\wε](?:\s+<\w+>)?)*)\s*$", re.MULTILINE)
-
-    if rules_count == len(re.findall(left_pattern, raw_grammar)):
-        transitions_pattern = re.compile(r"^\s*(?:<(\w*)>)?\s*([\wε]*)\s*$")
-        return grammar_to_states(raw_grammar, left_pattern, transitions_pattern, is_right=False)
-    else:
-        transitions_pattern = re.compile(r"^\s*([\wε]*)\s*(?:<(\w*)>)?\s*$")
-        return grammar_to_states(raw_grammar, right_pattern, transitions_pattern, is_right=True)
+        for symbol in symbols:
+            transitions = [state_machine[state].transitions[symbol][0] for state in states_line[1:]]
+            f.write(';'.join([symbol] + transitions) + "\n")
 
 
 def main():
-    with open(sys.argv[1], "r", encoding="utf-8") as file:
-        input_text = file.read()
-    
-    states, start_state = parse_grammar(input_text)
-    save_states(states, sys.argv[2], start_state)
+    state_machine, start_state, final_state = read_state_matchine(sys.argv[1])
+    determined_state_machine = determine_state_machine(state_machine, start_state, final_state)
+    save_state_machine(determined_state_machine, sys.argv[2])
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
