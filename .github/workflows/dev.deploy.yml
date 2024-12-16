@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout dev branch
+    - name: Checkout main branch
       uses: actions/checkout@v2
       with:
-        ref: dev
+        ref: main
 
     - name: Set up SSH key
       run: |
